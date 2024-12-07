@@ -34,13 +34,14 @@ class PCA:
     
 class PPCA:
     
-    def __init__(self, nb_components : int, sigma2 : Union[float, None] = None):
+    def __init__(self, nb_components : int, sigma2 : Union[float, None] = None, R : Union[np.ndarray, None] = None):
         self.nb_components = nb_components
         self.mean = None
         self.W = None
         self.components = None
         self.sigma2 = sigma2
         self.inv_M = None
+        self.R = R 
     
     def fit(self, X):
         #X is assumed to be of shape (n_samples, d) with d dimension of the samples
@@ -59,7 +60,12 @@ class PPCA:
             self.sigma2 = 1/(d-self.nb_components) * np.sum(decr_eigenvalues[self.nb_components:])
 
         diag = np.diag(np.sqrt(decr_eigenvalues[:self.nb_components] - self.sigma2))
-        self.W = decr_eigenvectors[:, :self.nb_components] @ diag
+
+        #Add optional rotation, else identity
+        if self.R is None:
+            self.R = np.eye(self.nb_components)
+
+        self.W = decr_eigenvectors[:, :self.nb_components] @ diag @ self.R
         self.inv_M = np.linalg.inv(self.W.T @ self.W + self.sigma2*np.eye(self.nb_components))
 
         self.components = decr_eigenvectors[:, :self.nb_components]

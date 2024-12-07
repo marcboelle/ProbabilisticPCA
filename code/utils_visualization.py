@@ -24,9 +24,10 @@ def plot_fig_projections(X, projections_2d, line_scale=1):
     min_projection = projections_2d.min(axis=0)
     max_projection = projections_2d.max(axis=0)
 
+    slope = (max_projection[1] - min_projection[1])/(max_projection[0] - min_projection[0])
     fig.add_trace(go.Scatter(
         x=[min_projection[0]-line_scale, max_projection[0]+line_scale],
-        y=[min_projection[1]-line_scale, max_projection[1]+line_scale],
+        y=[min_projection[1]-line_scale*slope, max_projection[1]+line_scale*slope],
         mode='lines',
         line=dict(color='darkorange', width=2),
         name="Principal direction",
