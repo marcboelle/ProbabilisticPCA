@@ -1,8 +1,9 @@
 import numpy as np
 from scipy.linalg import eigh
 
-from typing import Union
 
+from typing import Union
+import time
 class PCA:
     
     def __init__(self, nb_components):
@@ -78,11 +79,38 @@ class PPCA:
 
 
 
-def EM_for_PPCA(X, nb_components : int, W_0 : np.ndarray, sigma2_0 : int, epsilon : int, max_iter : int):
+def EM_for_PPCA(X, nb_components : int, W_0 : np.ndarray, sigma2_0 : int, max_iter : int, plot_time : bool = False):
     
-    tr_S = np.sum()
+    if plot_time:
+        time_start = time.time()
+
+    N, d = X.shape
 
     W, sigma2 = W_0, sigma2_0
-    
+
+    X_centered = X - np.mean(X, axis=0)
+    tr_S = 1/N * np.sum(X_centered**2)
+
     for i in range(max_iter):
-        SW = np.sum(X[:, ])
+        if i%100000 == 0:
+            print(f"Epoch {i}")
+            print(W)
+            print(sigma2)
+        XW = X_centered @ W
+        SW = 1/N * X_centered.T @ XW
+
+        M = W.T @ W + sigma2 * np.eye(nb_components)
+        #inv_M = np.linalg.inv(M)
+        inv_M = np.linalg.solve(M, np.eye(nb_components))
+        #E step:
+        W = SW @ np.linalg.inv(sigma2*np.eye(nb_components) + inv_M @ W.T @ SW)
+
+        #M step:
+        sigma2 = 1/d * (tr_S - np.trace(SW @ inv_M @ W.T))
+    
+    if plot_time:
+        time_total = time.time() - time_start
+        return W, sigma2, time_total
+    return W, sigma2
+    
+
