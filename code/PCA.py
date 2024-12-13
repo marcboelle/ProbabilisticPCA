@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.linalg import eigh
+from scipy.linalg import eigh, orth
 
 
 from typing import Union
@@ -113,4 +113,93 @@ def EM_for_PPCA(X, nb_components : int, W_0 : np.ndarray, sigma2_0 : int, max_it
         return W, sigma2, time_total
     return W, sigma2
     
+
+
+
+
+def ppca_missing_values(Y, d, dia):
+    """
+    Implements probabilistic PCA for data with missing values,
+    using a factorizing distribution over hidden states and hidden observations.
+
+    Args:
+        Y:   (N by D ) input numpy ndarray of data vectors
+        d:   (  int  ) dimension of latent space
+        dia: (boolean) if True: print objective each step
+
+    Returns:
+        C:  (D by d ) C*C' + I*ss is covariance model, C has scaled principal directions as cols
+        ss: ( float ) isotropic variance outside subspace
+        M:  (D by 1 ) data mean
+        X:  (N by d ) expected states
+        Ye: (N by D ) expected complete observations (differs from Y if data is missing)
+
+        Based on MATLAB code from J.J. VerBeek, 2006. http://lear.inrialpes.fr/~verbeek
+    """
+    N, D = Y.shape  # N observations in D dimensions (i.e. D is number of features, N is samples)
+    threshold = 1E-4  # minimal relative change in objective function to continue
+    hidden = np.isnan(Y)
+    missing = hidden.sum()
+
+    if missing > 0:
+        M = np.nanmean(Y, axis=0)
+    else:
+        M = np.mean(Y, axis=0)
+
+    Ye = Y - np.matlib.repmat(M, N, 1)
+
+    if missing > 0:
+        Ye[hidden] = 0
+
+    # initialize
+    C = np.random.normal(loc=0.0, scale=1.0, size=(D, d))
+    CtC = C.T @ C
+    X = Ye @ C @ np.linalg.inv(CtC)
+    recon = X @ C.T
+    recon[hidden] = 0
+    ss = np.sum((recon - Ye) ** 2) / (N * D - missing)
+
+    count = 1
+    old = np.inf
+
+    # EM Iterations
+    while (count):
+        Sx = np.linalg.inv(np.eye(d) + CtC / ss)  # E-step, covariances
+        ss_old = ss
+        if missing > 0:
+            proj = X @ C.T
+            Ye[hidden] = proj[hidden]
+
+        X = Ye @ C @ Sx / ss  # E-step: expected values
+
+        SumXtX = X.T @ X  # M-step
+        C = Ye.T @ X @ (SumXtX + N * Sx).T @ np.linalg.inv(((SumXtX + N * Sx) @ (SumXtX + N * Sx).T))
+        CtC = C.T @ C
+        ss = (np.sum((X @ C.T - Ye) ** 2) + N * np.sum(CtC * Sx) + missing * ss_old) / (N * D)
+        # transform Sx determinant into numpy longdouble in order to deal with high dimensionality
+        Sx_det = np.min(Sx).astype(np.longdouble) ** Sx.shape[0] * np.linalg.det(Sx / np.min(Sx))
+        objective = N * D + N * (D * np.log(ss) + np.trace(Sx) - np.log(Sx_det)) + np.trace(SumXtX) - missing * np.log(ss_old)
+
+        rel_ch = np.abs(1 - objective / old)
+        old = objective
+
+        count = count + 1
+        if rel_ch < threshold and count > 5:
+            count = 0
+        if dia:
+            print(f"Objective: {objective:.2f}, Relative Change {rel_ch:.5f}")
+
+    C = orth(C)
+    covM = np.cov((Ye @ C).T)
+    vals, vecs = np.linalg.eig(covM)
+    ordr = np.argsort(vals)[::-1]
+    vecs = vecs[:, ordr]
+
+    C = C @ vecs
+    X = Ye @ C
+
+    # add data mean to expected complete data
+    Ye = Ye + np.matlib.repmat(M, N, 1)
+
+    return C, ss, M, X, Ye
 
